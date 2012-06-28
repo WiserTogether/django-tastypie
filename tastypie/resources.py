@@ -447,7 +447,7 @@ class Resource(object):
         if not isinstance(response, HttpResponse):
             return http.HttpNoContent()
         elif self._meta.envelope_class:
-            envelope = self._meta.envelope_class(request_type, response)
+            envelope = self._meta.envelope_class(request_type, self._meta.validation, response)
             response.content = envelope.transform()
 
         return response
