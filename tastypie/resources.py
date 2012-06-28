@@ -10,14 +10,17 @@ from django.db import transaction
 from django.db.models.sql.constants import QUERY_TERMS, LOOKUP_SEP
 from django.http import HttpResponse, HttpResponseNotFound, Http404
 from django.utils.cache import patch_cache_control
+
+from tastypie import fields
+from tastypie import http
+
 from tastypie.authentication import Authentication
 from tastypie.authorization import ReadOnlyAuthorization
 from tastypie.bundle import Bundle
 from tastypie.cache import NoCache
 from tastypie.constants import ALL, ALL_WITH_RELATIONS
+from tastypie.envelopes import DefaultEnvelope
 from tastypie.exceptions import NotFound, BadRequest, InvalidFilterError, HydrationError, InvalidSortError, ImmediateHttpResponse
-from tastypie import fields
-from tastypie import http
 from tastypie.paginator import Paginator
 from tastypie.serializers import Serializer
 from tastypie.throttle import BaseThrottle
@@ -61,6 +64,7 @@ class ResourceOptions(object):
     throttle = BaseThrottle()
     validation = Validation()
     paginator_class = Paginator
+    envelope_class = DefaultEnvelope
     allowed_methods = ['get', 'post', 'put', 'delete', 'patch']
     list_allowed_methods = None
     detail_allowed_methods = None
@@ -442,6 +446,12 @@ class Resource(object):
         # prevents Django from freaking out.
         if not isinstance(response, HttpResponse):
             return http.HttpNoContent()
+        elif self._meta.envelope_class:
+            # Apply envelopes only to HttpResponse returning JSON
+            content_type = response._headers.get('content_type', None)
+            if 'json' in content_type[1]:
+                envelope = self._meta.envelope_class(request_type, response)
+                response.content = envelope.transform()
 
         return response
 
