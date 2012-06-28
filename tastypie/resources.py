@@ -447,11 +447,8 @@ class Resource(object):
         if not isinstance(response, HttpResponse):
             return http.HttpNoContent()
         elif self._meta.envelope_class:
-            # Apply envelopes only to HttpResponse returning JSON
-            content_type = response._headers.get('content_type', None)
-            if 'json' in content_type[1]:
-                envelope = self._meta.envelope_class(request_type, response)
-                response.content = envelope.transform()
+            envelope = self._meta.envelope_class(request_type, response)
+            response.content = envelope.transform()
 
         return response
 
