@@ -1,6 +1,7 @@
 from django.core.serializers.json import simplejson as json
 from django.http import HttpResponse
 
+from tastypie.bundle import Bundle
 from tastypie.utils.mime import build_content_type
 from tastypie.validation import FormValidation
 
@@ -75,6 +76,7 @@ class MetaEnvelope(DefaultEnvelope):
         self.errors = {}
         self.data = {}
 
+        self.is_modified = False
         self.is_processed = False
         self.response_dict = {}
 
@@ -104,7 +106,9 @@ class MetaEnvelope(DefaultEnvelope):
 
             # Load form errors if present
             if isinstance(self.validation, FormValidation):
-                form_errors = self.validation.is_valid()
+                bundle = Bundle()
+                bundle.data = self.data
+                form_errors = self.validation.is_valid(bundle)
                 if form_errors:
                     self.errors = {
                         'form': form_errors
@@ -116,7 +120,13 @@ class MetaEnvelope(DefaultEnvelope):
                     'Invalid API request'
                 ]
 
-        self.is_processed = False
+            self.response_dict['data'] = self.data
+            self.is_modified = True
+
+        self.is_processed = True
+
+    def clear_data(self):
+        self.response_dict['data'] = {}
 
     def transform(self):
         """
@@ -125,14 +135,13 @@ class MetaEnvelope(DefaultEnvelope):
         if not self.is_processed:
             self.process()
 
-        if not self.errors:
-            # If there are no errors then add in data
-            self.response_dict['data'] = self.data
-        elif self.response_dict['meta']['status'] == 200:
-            # If there are errors and status has not been updated then update status
-            self.response_dict['meta']['status'] = 400
+        if self.errors:
+            self.clear_data()
+            if self.response_dict['meta']['status'] == 200:
+                # If there are errors and status has not been updated then update status
+                self.response_dict['meta']['status'] = 400
 
-        if self.response_dict:
+        if self.is_modified:
             return HttpResponse(
                 content=json.dumps(self.response_dict),
                 content_type=build_content_type('application/json')
