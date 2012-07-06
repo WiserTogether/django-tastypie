@@ -40,6 +40,7 @@ class FormValidation(Validation):
             raise ImproperlyConfigured("You must provide a 'form_class' to 'FormValidation' classes.")
 
         self.form_class = kwargs.pop('form_class')
+        self.form = None
         super(FormValidation, self).__init__(**kwargs)
 
     def form_args(self, bundle):
@@ -68,14 +69,14 @@ class FormValidation(Validation):
         not, a list of errors will be returned.
         """
 
-        form = self.form_class(**self.form_args(bundle))
+        self.form = self.form_class(**self.form_args(bundle))
 
-        if form.is_valid():
+        if self.form.is_valid():
             return {}
 
         # The data is invalid. Let's collect all the error messages & return
         # them.
-        return form.errors
+        return self.form.errors
 
 
 class CleanedDataFormValidation(FormValidation):

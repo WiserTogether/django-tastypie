@@ -1,5 +1,7 @@
 from django.core.serializers.json import simplejson as json
+from django.http import HttpResponse
 
+from tastypie.utils.mime import build_content_type
 from tastypie.validation import FormValidation
 
 
@@ -12,8 +14,11 @@ class DefaultEnvelope(object):
         self.validation = validation
         self.response = response
 
+    def process(self):
+        pass
+
     def transform(self):
-        return self.response.content
+        return self.response
 
 
 class MetaEnvelope(DefaultEnvelope):
@@ -70,14 +75,17 @@ class MetaEnvelope(DefaultEnvelope):
         self.errors = {}
         self.data = {}
 
-    def transform(self):
+        self.is_processed = False
+        self.response_dict = {}
+
+    def process(self):
         # Apply envelopes only to HttpResponse returning JSON
         content_type = self.response._headers.get('content-type', None)
         if content_type is not None and 'json' in content_type[1]:
             original_response_content = json.loads(self.response.content)
 
             # Create base meta structure
-            response_content = {
+            self.response_dict = {
                 'meta': {
                     'status': self.response.status_code,
                     'errors': {}
@@ -87,16 +95,12 @@ class MetaEnvelope(DefaultEnvelope):
 
             # Load data depending on whether its a list of object or a single object
             if self.request_type == 'list':
-                response_content['meta']['pagination'] = original_response_content['meta']
+                self.response_dict['meta']['pagination'] = original_response_content['meta']
                 self.data = original_response_content['objects']
             elif self.request_type == 'detail':
                 self.data = original_response_content
             else:
-                self.errors = {
-                    'api': [
-                        'Invalid request type'
-                    ]
-                }
+                self.data = original_response_content
 
             # Load form errors if present
             if isinstance(self.validation, FormValidation):
@@ -105,17 +109,33 @@ class MetaEnvelope(DefaultEnvelope):
                     self.errors = {
                         'form': form_errors
                     }
+                    self.response_dict['meta']['status'] = 400
 
-            # Clear/load data depending on presence of error
-            response_content['meta']['errors'] = self.errors
-            if not self.errors:
-                response_content['data'] = self.data
-                response_content['meta']['status'] = 200
-            else:
-                response_content['meta']['status'] = 400
+            if self.response_dict['meta']['status'] >= 400:
+                self.response_dict['meta']['errors']['api'] = [
+                    'Invalid API request'
+                ]
 
-            response_content = json.dumps(response_content)
+        self.is_processed = False
+
+    def transform(self):
+        """
+        After processing, the response structure can be edited before transform
+        """
+        if not self.is_processed:
+            self.process()
+
+        if not self.errors:
+            # If there are no errors then add in data
+            self.response_dict['data'] = self.data
+        elif self.response_dict['meta']['status'] == 200:
+            # If there are errors and status has not been updated then update status
+            self.response_dict['meta']['status'] = 400
+
+        if self.response_dict:
+            return HttpResponse(
+                content=json.dumps(self.response_dict),
+                content_type=build_content_type('application/json')
+            )
         else:
-            response_content = self.response.content
-
-        return response_content
+            return self.response
