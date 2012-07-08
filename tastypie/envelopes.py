@@ -1,3 +1,6 @@
+import copy
+import logging
+
 from django.core.serializers.json import simplejson as json
 from django.http import HttpResponse
 
@@ -6,12 +9,14 @@ from tastypie.utils.mime import build_content_type
 from tastypie.validation import FormValidation
 
 
+logger = logging.getLogger(__name__)
+
+
 class DefaultEnvelope(object):
     """
     Default envelope emulates what tastypie already sends out
     """
-    def __init__(self, request_type, validation, response):
-        self.request_type = request_type
+    def __init__(self, validation, response):
         self.validation = validation
         self.response = response
 
@@ -70,63 +75,113 @@ class MetaEnvelope(DefaultEnvelope):
     }
     """
 
-    def __init__(self, request_type, validation, response):
-        super(MetaEnvelope, self).__init__(request_type, validation, response)
-        self.status = 200
-        self.errors = {}
-        self.data = {}
-
+    def __init__(self, validation, response=None, content=None):
+        super(MetaEnvelope, self).__init__(validation, response)
         self.is_modified = False
         self.is_processed = False
-        self.response_dict = {}
+        self.content = content
+
+        self.response_data = {
+            'meta': {
+                'status': self.response and self.response.status_code or 200,
+                'errors': {}
+            },
+            'data': {}
+        }
 
     def process(self):
         # Apply envelopes only to HttpResponse returning JSON
-        content_type = self.response._headers.get('content-type', None)
-        if content_type is not None and 'json' in content_type[1]:
-            original_response_content = json.loads(self.response.content)
+        is_eligible = False
 
-            # Create base meta structure
-            self.response_dict = {
-                'meta': {
-                    'status': self.response.status_code,
-                    'errors': {}
-                },
-                'data': {}
-            }
-
-            # Load data depending on whether its a list of object or a single object
-            if self.request_type == 'list':
-                self.response_dict['meta']['pagination'] = original_response_content['meta']
-                self.data = original_response_content['objects']
-            elif self.request_type == 'detail':
-                self.data = original_response_content
+        if self.response is None and self.content is None:
+            is_eligible = False
+            logger.warning('Envelope initialized without response or raw content')
+        elif self.content and isinstance(self.content, dict):
+            if not(set(['meta', 'data']) < set(self.content.keys())):
+                is_eligible = True
             else:
-                self.data = original_response_content
+                logger.warning('Attempting to envelope response that is already enveloped')
 
+            if is_eligible:
+                self.update_data(self.content)
+        elif self.response:
+            content_type = self.response._headers.get('content-type', None)
+            if content_type is not None and 'json' in content_type[1]:
+                if not(set(['meta', 'data']) < set(self.response_data['data'].keys())):
+                    is_eligible = True
+                else:
+                    logger.warning('Attempting to envelope response that is already enveloped')
+
+                if is_eligible:
+                    original_response_content = json.loads(self.response.content)
+
+                    # Load data depending on whether its a list of object or a single object
+                    if 'meta' in original_response_content and 'objects' in original_response_content:
+                        self.response_data['meta']['pagination'] = original_response_content['meta']
+                        self.update_data(original_response_content['objects'])
+                    else:
+                        self.update_data(original_response_content)
+        else:
+            logger.warning('Response or data can not be enveloped')
+
+        if is_eligible:
             # Load form errors if present
             if isinstance(self.validation, FormValidation):
                 bundle = Bundle()
-                bundle.data = self.data
+                bundle.data = self.response_data['data']
                 form_errors = self.validation.is_valid(bundle)
                 if form_errors:
-                    self.errors = {
-                        'form': form_errors
-                    }
-                    self.response_dict['meta']['status'] = 400
+                    self.add_errors('form', form_errors)
+                    self.set_status(400)
 
-            if self.response_dict['meta']['status'] >= 400:
-                self.response_dict['meta']['errors']['api'] = [
-                    'Invalid API request'
-                ]
+            if self.contains_errors():
+                self.set_status(400)
 
-            self.response_dict['data'] = self.data
             self.is_modified = True
+        else:
+            logger.warning('Response or data can not be enveloped')
 
         self.is_processed = True
 
+    def update_data(self, data):
+        self.response_data['data'] = copy.deepcopy(data)
+
     def clear_data(self):
-        self.response_dict['data'] = {}
+        self.response_data['data'] = {}
+
+    def contains_errors(self):
+        if self.get_status() >= 400 or self.get_errors():
+            return True
+        return False
+
+    def get_errors(self):
+        return self.response_data['meta']['errors']
+
+    def add_errors(self, category, data):
+        if category not in self.response_data['meta']['errors']:
+            self.response_data['meta']['errors'][category] = {
+                '__all__': []
+            }
+
+        if isinstance(data, dict):
+            self.response_data['meta']['errors'][category] = copy.deepcopy(data)
+        elif isinstance(data, (str, unicode)):
+            if data not in self.response_data['meta']['errors'][category]['__all__']:
+                self.response_data['meta']['errors'][category]['__all__'].append(data)
+
+    def get_status(self):
+        return self.response_data['meta']['status']
+
+    def set_status(self, status_code):
+        self.response_data['meta']['status'] = status_code
+        if status_code >= 400:
+            self.add_errors('api', 'Invalid API request')
+
+    def build_response(self):
+        return HttpResponse(
+            content=json.dumps(self.response_data),
+            content_type=build_content_type('application/json')
+        )
 
     def transform(self):
         """
@@ -135,16 +190,17 @@ class MetaEnvelope(DefaultEnvelope):
         if not self.is_processed:
             self.process()
 
-        if self.errors:
-            self.clear_data()
-            if self.response_dict['meta']['status'] == 200:
-                # If there are errors and status has not been updated then update status
-                self.response_dict['meta']['status'] = 400
-
         if self.is_modified:
-            return HttpResponse(
-                content=json.dumps(self.response_dict),
-                content_type=build_content_type('application/json')
-            )
+            if self.contains_errors():
+                self.clear_data()
+                if self.get_status() == 200:
+                    # If there are errors and status has not been updated then update status
+                    self.set_status(400)
+
+            return self.build_response()
         else:
-            return self.response
+            if self.response is not None:
+                return self.response
+            else:
+                self.set_status(500)
+                return self.build_response()

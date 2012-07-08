@@ -447,7 +447,7 @@ class Resource(object):
         if not isinstance(response, HttpResponse):
             return http.HttpNoContent()
         elif self._meta.envelope_class:
-            envelope = self._meta.envelope_class(request_type, self._meta.validation, response)
+            envelope = self._meta.envelope_class(self._meta.validation, response)
             response = envelope.transform()
 
         return response
@@ -1010,7 +1010,10 @@ class Resource(object):
         """
         desired_format = self.determine_format(request)
         serialized = self.serialize(request, data, desired_format)
-        return response_class(content=serialized, content_type=build_content_type(desired_format), **response_kwargs)
+        response = response_class(content=serialized, content_type=build_content_type(desired_format), **response_kwargs)
+
+        envelope = self._meta.envelope_class(self._meta.validation, response)
+        return envelope.transform()
 
     def error_response(self, errors, request):
         if request:
