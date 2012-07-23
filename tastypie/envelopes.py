@@ -107,14 +107,14 @@ class MetaEnvelope(DefaultEnvelope):
         elif self.response:
             content_type = self.response._headers.get('content-type', None)
             if content_type is not None and 'json' in content_type[1]:
-                if not(set(['meta', 'data']) < set(self.response_data['data'].keys())):
+                original_response_content = json.loads(self.response.content)
+
+                if 'meta' not in original_response_content or 'data' not in original_response_content:
                     is_eligible = True
                 else:
                     logger.warning('Attempting to envelope response that is already enveloped')
 
                 if is_eligible:
-                    original_response_content = json.loads(self.response.content)
-
                     # Load data depending on whether its a list of object or a single object
                     if 'meta' in original_response_content and 'objects' in original_response_content:
                         self.response_data['meta']['pagination'] = original_response_content['meta']
