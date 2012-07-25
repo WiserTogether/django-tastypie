@@ -428,7 +428,10 @@ class Resource(object):
         method = getattr(self, "%s_%s" % (request_method, request_type), None)
 
         if method is None:
-            raise ImmediateHttpResponse(response=http.HttpNotImplemented())
+            raise ImmediateHttpResponse(
+                response=http.HttpNotImplemented(),
+                envelope_class=self._meta.envelope_class
+            )
 
         self.is_authenticated(request)
         self.is_authorized(request)
@@ -518,10 +521,16 @@ class Resource(object):
         auth_result = self._meta.authorization.is_authorized(request, object)
 
         if isinstance(auth_result, HttpResponse):
-            raise ImmediateHttpResponse(response=auth_result)
+            raise ImmediateHttpResponse(
+                response=auth_result,
+                envelope_class=self._meta.envelope_class
+            )
 
         if not auth_result is True:
-            raise ImmediateHttpResponse(response=http.HttpUnauthorized())
+            raise ImmediateHttpResponse(
+                response=http.HttpUnauthorized(),
+                envelope_class=self._meta.envelope_class
+            )
 
     def is_authenticated(self, request):
         """
@@ -535,10 +544,16 @@ class Resource(object):
         auth_result = self._meta.authentication.is_authenticated(request)
 
         if isinstance(auth_result, HttpResponse):
-            raise ImmediateHttpResponse(response=auth_result)
+            raise ImmediateHttpResponse(
+                response=auth_result,
+                envelope_class=self._meta.envelope_class
+            )
 
         if not auth_result is True:
-            raise ImmediateHttpResponse(response=http.HttpUnauthorized())
+            raise ImmediateHttpResponse(
+                response=http.HttpUnauthorized(),
+                envelope_class=self._meta.envelope_class
+            )
 
     def throttle_check(self, request):
         """

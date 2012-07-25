@@ -75,7 +75,7 @@ class MetaEnvelope(DefaultEnvelope):
     }
     """
 
-    def __init__(self, validation, response=None, content=None):
+    def __init__(self, validation=None, response=None, content=None):
         super(MetaEnvelope, self).__init__(validation, response)
         self.is_modified = False
         self.is_processed = False
@@ -126,7 +126,7 @@ class MetaEnvelope(DefaultEnvelope):
 
         if is_eligible:
             # Load form errors if present
-            if isinstance(self.validation, FormValidation):
+            if self.validation is not None and isinstance(self.validation, FormValidation):
                 bundle = Bundle()
                 bundle.data = self.response_data['data']
                 form_errors = self.validation.is_valid(bundle)
@@ -174,8 +174,18 @@ class MetaEnvelope(DefaultEnvelope):
 
     def set_status(self, status_code):
         self.response_data['meta']['status'] = status_code
-        if status_code >= 400:
+        if status_code == 400:
             self.add_errors('api', 'Invalid API request')
+        elif status_code == 401:
+            self.add_errors('api', 'Unauthorized API request')
+        elif status_code == 403:
+            self.add_errors('api', 'API request forbidden')
+        elif status_code == 404:
+            self.add_errors('api', 'Requested resource was not found')
+        elif status_code == 405:
+            self.add_errors('api', 'API method not allowed')
+        elif status_code >= 500:
+            self.add_errors('api', 'System error occurred')
 
     def build_response(self):
         return HttpResponse(
@@ -202,5 +212,6 @@ class MetaEnvelope(DefaultEnvelope):
             if self.response is not None:
                 return self.response
             else:
-                self.set_status(500)
+                if self.get_status() < 400:
+                    self.set_status(500)
                 return self.build_response()

@@ -41,6 +41,12 @@ class FormValidation(Validation):
 
         self.form_class = kwargs.pop('form_class')
         self.form = None
+
+        self.form_kwargs = {}
+
+        if 'form_kwargs' in kwargs:
+            self.form_kwargs = kwargs.pop('form_kwargs')
+
         super(FormValidation, self).__init__(**kwargs)
 
     def form_args(self, bundle):
@@ -59,6 +65,8 @@ class FormValidation(Validation):
             kwargs['data'] = model_to_dict(bundle.obj)
 
         kwargs['data'].update(data)
+        kwargs.update(self.form_kwargs)
+
         return kwargs
 
     def is_valid(self, bundle, request=None):

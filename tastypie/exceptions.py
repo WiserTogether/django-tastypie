@@ -1,5 +1,7 @@
 from django.http import HttpResponse
 
+from tastypie.envelopes import DefaultEnvelope, MetaEnvelope
+
 
 class TastypieError(Exception):
     """A base exception for other tastypie-related errors."""
@@ -82,5 +84,10 @@ class ImmediateHttpResponse(TastypieError):
     """
     response = HttpResponse("Nothing provided.")
 
-    def __init__(self, response):
-        self.response = response
+    def __init__(self, response, envelope_class=None):
+        if envelope_class == MetaEnvelope:
+            envelope = envelope_class(validation=None)
+            envelope.set_status(response.status_code)
+            self.response = envelope.transform()
+        else:
+            self.response = response
