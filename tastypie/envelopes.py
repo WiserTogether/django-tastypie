@@ -202,7 +202,6 @@ class MetaEnvelope(DefaultEnvelope):
 
         if self.is_modified:
             if self.contains_errors():
-                self.clear_data()
                 if self.get_status() == 200:
                     # If there are errors and status has not been updated then update status
                     self.set_status(400)
