@@ -10,14 +10,17 @@ from django.db import transaction
 from django.db.models.sql.constants import QUERY_TERMS, LOOKUP_SEP
 from django.http import HttpResponse, HttpResponseNotFound, Http404
 from django.utils.cache import patch_cache_control
+
+from tastypie import fields
+from tastypie import http
+
 from tastypie.authentication import Authentication
 from tastypie.authorization import ReadOnlyAuthorization
 from tastypie.bundle import Bundle
 from tastypie.cache import NoCache
 from tastypie.constants import ALL, ALL_WITH_RELATIONS
+from tastypie.envelopes import DefaultEnvelope
 from tastypie.exceptions import NotFound, BadRequest, InvalidFilterError, HydrationError, InvalidSortError, ImmediateHttpResponse
-from tastypie import fields
-from tastypie import http
 from tastypie.paginator import Paginator
 from tastypie.serializers import Serializer
 from tastypie.throttle import BaseThrottle
@@ -61,6 +64,7 @@ class ResourceOptions(object):
     throttle = BaseThrottle()
     validation = Validation()
     paginator_class = Paginator
+    envelope_class = DefaultEnvelope
     allowed_methods = ['get', 'post', 'put', 'delete', 'patch']
     list_allowed_methods = None
     detail_allowed_methods = None
@@ -424,7 +428,10 @@ class Resource(object):
         method = getattr(self, "%s_%s" % (request_method, request_type), None)
 
         if method is None:
-            raise ImmediateHttpResponse(response=http.HttpNotImplemented())
+            raise ImmediateHttpResponse(
+                response=http.HttpNotImplemented(),
+                envelope_class=self._meta.envelope_class
+            )
 
         self.is_authenticated(request)
         self.is_authorized(request)
@@ -442,6 +449,9 @@ class Resource(object):
         # prevents Django from freaking out.
         if not isinstance(response, HttpResponse):
             return http.HttpNoContent()
+        elif self._meta.envelope_class:
+            envelope = self._meta.envelope_class(self._meta.validation, response)
+            response = envelope.transform()
 
         return response
 
@@ -492,12 +502,12 @@ class Resource(object):
         if request_method == "options":
             response = HttpResponse(allows)
             response['Allow'] = allows
-            raise ImmediateHttpResponse(response=response)
+            raise ImmediateHttpResponse(response=response, envelope_class=self._meta.envelope_class)
 
         if not request_method in allowed:
             response = http.HttpMethodNotAllowed(allows)
             response['Allow'] = allows
-            raise ImmediateHttpResponse(response=response)
+            raise ImmediateHttpResponse(response=response, envelope_class=self._meta.envelope_class)
 
         return request_method
 
@@ -511,10 +521,16 @@ class Resource(object):
         auth_result = self._meta.authorization.is_authorized(request, object)
 
         if isinstance(auth_result, HttpResponse):
-            raise ImmediateHttpResponse(response=auth_result)
+            raise ImmediateHttpResponse(
+                response=auth_result,
+                envelope_class=self._meta.envelope_class
+            )
 
         if not auth_result is True:
-            raise ImmediateHttpResponse(response=http.HttpUnauthorized())
+            raise ImmediateHttpResponse(
+                response=http.HttpUnauthorized(),
+                envelope_class=self._meta.envelope_class
+            )
 
     def is_authenticated(self, request):
         """
@@ -528,10 +544,16 @@ class Resource(object):
         auth_result = self._meta.authentication.is_authenticated(request)
 
         if isinstance(auth_result, HttpResponse):
-            raise ImmediateHttpResponse(response=auth_result)
+            raise ImmediateHttpResponse(
+                response=auth_result,
+                envelope_class=self._meta.envelope_class
+            )
 
         if not auth_result is True:
-            raise ImmediateHttpResponse(response=http.HttpUnauthorized())
+            raise ImmediateHttpResponse(
+                response=http.HttpUnauthorized(),
+                envelope_class=self._meta.envelope_class
+            )
 
     def throttle_check(self, request):
         """
@@ -545,7 +567,10 @@ class Resource(object):
         # Check to see if they should be throttled.
         if self._meta.throttle.should_be_throttled(identifier):
             # Throttle limit exceeded.
-            raise ImmediateHttpResponse(response=http.HttpTooManyRequests())
+            raise ImmediateHttpResponse(
+                response=http.HttpTooManyRequests(),
+                envelope_class=self._meta.envelope_class
+            )
 
     def log_throttled_access(self, request):
         """
@@ -1003,7 +1028,10 @@ class Resource(object):
         """
         desired_format = self.determine_format(request)
         serialized = self.serialize(request, data, desired_format)
-        return response_class(content=serialized, content_type=build_content_type(desired_format), **response_kwargs)
+        response = response_class(content=serialized, content_type=build_content_type(desired_format), **response_kwargs)
+
+        envelope = self._meta.envelope_class(self._meta.validation, response)
+        return envelope.transform()
 
     def error_response(self, errors, request):
         if request:
@@ -1013,7 +1041,7 @@ class Resource(object):
 
         serialized = self.serialize(request, errors, desired_format)
         response = http.HttpBadRequest(content=serialized, content_type=build_content_type(desired_format))
-        raise ImmediateHttpResponse(response=response)
+        raise ImmediateHttpResponse(response=response, envelope_class=self._meta.envelope_class)
 
     def is_valid(self, bundle, request=None):
         """
@@ -1294,7 +1322,10 @@ class Resource(object):
             raise BadRequest("Invalid data sent.")
 
         if len(deserialized["objects"]) and 'put' not in self._meta.detail_allowed_methods:
-            raise ImmediateHttpResponse(response=http.HttpMethodNotAllowed())
+            raise ImmediateHttpResponse(
+                response=http.HttpMethodNotAllowed(),
+                envelope_class=self._meta.envelope_class
+            )
 
         for data in deserialized["objects"]:
             # If there's a resource_uri then this is either an
@@ -1324,7 +1355,10 @@ class Resource(object):
                 self.obj_create(bundle, request=request)
 
         if len(deserialized.get('deleted_objects', [])) and 'delete' not in self._meta.detail_allowed_methods:
-            raise ImmediateHttpResponse(response=http.HttpMethodNotAllowed())
+            raise ImmediateHttpResponse(
+                response=http.HttpMethodNotAllowed(),
+                envelope_class=self._meta.envelope_class
+            )
 
         for uri in deserialized.get('deleted_objects', []):
             obj = self.get_via_uri(uri, request=request)
