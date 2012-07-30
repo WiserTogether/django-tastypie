@@ -134,9 +134,6 @@ class MetaEnvelope(DefaultEnvelope):
                     self.add_errors('form', form_errors)
                     self.set_status(400)
 
-            if self.contains_errors():
-                self.set_status(400)
-
             self.is_modified = True
         else:
             logger.warning('Response or data can not be enveloped')
