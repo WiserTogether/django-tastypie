@@ -502,12 +502,12 @@ class Resource(object):
         if request_method == "options":
             response = HttpResponse(allows)
             response['Allow'] = allows
-            raise ImmediateHttpResponse(response=response)
+            raise ImmediateHttpResponse(response=response, envelope_class=self._meta.envelope_class)
 
         if not request_method in allowed:
             response = http.HttpMethodNotAllowed(allows)
             response['Allow'] = allows
-            raise ImmediateHttpResponse(response=response)
+            raise ImmediateHttpResponse(response=response, envelope_class=self._meta.envelope_class)
 
         return request_method
 
@@ -567,7 +567,10 @@ class Resource(object):
         # Check to see if they should be throttled.
         if self._meta.throttle.should_be_throttled(identifier):
             # Throttle limit exceeded.
-            raise ImmediateHttpResponse(response=http.HttpTooManyRequests())
+            raise ImmediateHttpResponse(
+                response=http.HttpTooManyRequests(),
+                envelope_class=self._meta.envelope_class
+            )
 
     def log_throttled_access(self, request):
         """
@@ -1038,7 +1041,7 @@ class Resource(object):
 
         serialized = self.serialize(request, errors, desired_format)
         response = http.HttpBadRequest(content=serialized, content_type=build_content_type(desired_format))
-        raise ImmediateHttpResponse(response=response)
+        raise ImmediateHttpResponse(response=response, envelope_class=self._meta.envelope_class)
 
     def is_valid(self, bundle, request=None):
         """
@@ -1319,7 +1322,10 @@ class Resource(object):
             raise BadRequest("Invalid data sent.")
 
         if len(deserialized["objects"]) and 'put' not in self._meta.detail_allowed_methods:
-            raise ImmediateHttpResponse(response=http.HttpMethodNotAllowed())
+            raise ImmediateHttpResponse(
+                response=http.HttpMethodNotAllowed(),
+                envelope_class=self._meta.envelope_class
+            )
 
         for data in deserialized["objects"]:
             # If there's a resource_uri then this is either an
@@ -1349,7 +1355,10 @@ class Resource(object):
                 self.obj_create(bundle, request=request)
 
         if len(deserialized.get('deleted_objects', [])) and 'delete' not in self._meta.detail_allowed_methods:
-            raise ImmediateHttpResponse(response=http.HttpMethodNotAllowed())
+            raise ImmediateHttpResponse(
+                response=http.HttpMethodNotAllowed(),
+                envelope_class=self._meta.envelope_class
+            )
 
         for uri in deserialized.get('deleted_objects', []):
             obj = self.get_via_uri(uri, request=request)
