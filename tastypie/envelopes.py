@@ -185,8 +185,10 @@ class MetaEnvelope(DefaultEnvelope):
             self.add_errors('api', 'System error occurred')
 
     def build_response(self):
+        from tastypie.serializers import Serializer
+        serializer = Serializer()
         return HttpResponse(
-            content=json.dumps(self.response_data),
+            content=serializer.serialize(self.response_data),
             content_type=build_content_type('application/json')
         )
 
