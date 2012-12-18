@@ -166,6 +166,23 @@ class MetaEnvelope(DefaultEnvelope):
             if data not in self.response_data['meta']['errors'][category]['__all__']:
                 self.response_data['meta']['errors'][category]['__all__'].append(data)
 
+    def add_messages(self, category, data):
+        if 'messages' not in self.response_data['meta']:
+            self.response_data['meta']['messages'] = {}
+
+        if category not in self.response_data['meta']['messages']:
+            self.response_data['meta']['messages'][category] = {
+                '__all__': []
+            }
+
+        if isinstance(data, dict):
+            self.response_data['meta']['messages'][category] = copy.deepcopy(data)
+        elif isinstance(data, (str, unicode)):
+            if data not in self.response_data['meta']['messages'][category]['__all__']:
+                self.response_data['meta']['messages'][category]['__all__'].append(data)
+
+        self.is_modified = True
+
     def get_status(self):
         return self.response_data['meta']['status']
 
