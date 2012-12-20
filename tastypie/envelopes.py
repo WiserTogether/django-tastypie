@@ -175,7 +175,7 @@ class MetaEnvelope(DefaultEnvelope):
             self.response_data['meta']['messages'][category] = {}
 
         if '__all__' not in self.response_data['meta']['messages'][category]:
-            self.response_data['meta']['errors'][category]['__all__'] = []
+            self.response_data['meta']['messages'][category]['__all__'] = []
 
         if isinstance(data, dict):
             self.response_data['meta']['messages'][category] = copy.deepcopy(data)
