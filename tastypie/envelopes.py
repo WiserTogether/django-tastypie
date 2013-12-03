@@ -1,7 +1,7 @@
 import copy
 import logging
+import json
 
-from django.core.serializers.json import simplejson as json
 from django.http import HttpResponse
 
 from tastypie.bundle import Bundle
