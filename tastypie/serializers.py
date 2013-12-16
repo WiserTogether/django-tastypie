@@ -3,7 +3,7 @@ import json
 from StringIO import StringIO
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.core.serializers import json
+from django.core.serializers.json import DjangoJSONEncoder
 from django.utils.encoding import force_unicode
 from tastypie.bundle import Bundle
 from tastypie.exceptions import UnsupportedFormat
@@ -335,7 +335,7 @@ class Serializer(object):
         """
         options = options or {}
         data = self.to_simple(data, options)
-        return json.dumps(data, cls=json.DjangoJSONEncoder, sort_keys=True, ensure_ascii=False)
+        return json.dumps(data, cls=DjangoJSONEncoder, sort_keys=True, ensure_ascii=False)
 
     def from_json(self, content):
         """
