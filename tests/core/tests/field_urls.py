@@ -1,4 +1,4 @@
-from django.conf.urls.defaults import *
+from django.conf.urls import *
 from tastypie import fields
 from tastypie.resources import ModelResource
 from core.models import Note, Subject

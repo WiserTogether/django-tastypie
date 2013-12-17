@@ -1,4 +1,4 @@
-from django.conf.urls.defaults import *
+from django.conf.urls import *
 from tastypie.api import Api
 from slashless.api.resources import NoteResource, UserResource
 

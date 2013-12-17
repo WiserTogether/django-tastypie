@@ -1,4 +1,4 @@
-from django.conf.urls.defaults import *
+from django.conf.urls import *
 from tastypie.api import NamespacedApi
 from namespaced.api.resources import NamespacedNoteResource, NamespacedUserResource
 
