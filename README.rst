@@ -49,7 +49,7 @@ A basic example looks like::
 
     # urls.py
     # =======
-    from django.conf.urls.defaults import *
+    from django.conf.urls import *
     from tastypie.api import Api
     from myapp.api import EntryResource
 

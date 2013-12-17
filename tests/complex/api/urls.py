@@ -1,4 +1,4 @@
-from django.conf.urls.defaults import *
+from django.conf.urls import *
 from tastypie.api import Api
 from complex.api.resources import PostResource, ProfileResource, CommentResource, UserResource, GroupResource
 
